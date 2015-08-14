@@ -76,9 +76,6 @@ class ServiceAccountCredentialsTests(unittest.TestCase):
     self.assertEqual(self.service_account_email,
                      self.credentials.service_account_email)
 
-  def test_create_scoped_required_without_scopes(self):
-    self.assertTrue(self.credentials.create_scoped_required())
-
   def test_create_scoped_required_with_scopes(self):
     self.credentials = _ServiceAccountCredentials(self.service_account_id,
                                                   self.service_account_email,

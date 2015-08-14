@@ -61,31 +61,49 @@ class _ServiceAccountCredentials(AssertionCredentials):
   def _generate_assertion(self):
     """Generate the assertion that will be used in the request."""
 
+    now = int(time.time())
     header = {
         'alg': 'RS256',
         'typ': 'JWT',
         'kid': self._private_key_id
     }
-
-    now = int(time.time())
     payload = {
         'aud': self._token_uri,
-        'scope': self._scopes,
         'iat': now,
         'exp': now + _ServiceAccountCredentials.MAX_TOKEN_LIFETIME_SECS,
         'iss': self._service_account_email
     }
-    payload.update(self._kwargs)
+    if self._scopes:
+      # Use usual process to acquire token
+      payload.update({
+          'scope': self._scopes,
+      })
+      payload.update(self._kwargs)
 
-    first_segment = _urlsafe_b64encode(_json_encode(header))
-    second_segment = _urlsafe_b64encode(_json_encode(payload))
-    assertion_input = first_segment + b'.' + second_segment
+      first_segment = _urlsafe_b64encode(_json_encode(header))
+      second_segment = _urlsafe_b64encode(_json_encode(payload))
+      assertion_input = first_segment + b'.' + second_segment
 
-    # Sign the assertion.
-    rsa_bytes = rsa.pkcs1.sign(assertion_input, self._private_key, 'SHA-256')
-    signature = base64.urlsafe_b64encode(rsa_bytes).rstrip(b'=')
+      # Sign the assertion.
+      rsa_bytes = rsa.pkcs1.sign(assertion_input, self._private_key, 'SHA-256')
+      signature = base64.urlsafe_b64encode(rsa_bytes).rstrip(b'=')
 
-    return assertion_input + b'.' + signature
+      return assertion_input + b'.' + signature
+
+    else:
+      # Use self-signed JWT
+      payload.update({
+          'sub': self._service_account_email
+      })
+      header['Authentication'] = payload
+      assertion_input = (_urlsafe_b64encode(_json_encode(header)) + b'.' +
+                         _urlsafe_b64encode(_json_encode(self._kwargs)))
+
+      # Sign the assertion.
+      rsa_bytes = rsa.pkcs1.sign(assertion_input, self._private_key, 'SHA-256')
+      signature = base64.urlsafe_b64encode(rsa_bytes).rstrip(b'=')
+
+      return assertion_input + b'.' + signature
 
   def sign_blob(self, blob):
     # Ensure that it is bytes
@@ -108,7 +126,7 @@ class _ServiceAccountCredentials(AssertionCredentials):
     }
 
   def create_scoped_required(self):
-    return not self._scopes
+    return False
 
   def create_scoped(self, scopes):
     return _ServiceAccountCredentials(self._service_account_id,
